@@ -1,0 +1,67 @@
+---
+title: "JEP WB"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## Load libraries
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(wbstats)
+new_wb_cache <- wb_cache()
+library(dplyr)
+library(zoo)
+```
+
+## Figure 3 and Table 1
+
+### Download World Bank Inflation, consumer prices (annual %)
+
+can be viewed at https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?view=chart 
+
+```{r download_inflation}
+inflation <- wb_data(indicator=c("FP.CPI.TOTL.ZG")) %>% 
+  rename(inflation = "FP.CPI.TOTL.ZG") %>%
+  group_by(country) %>%
+  arrange(country,date) 
+```
+
+### Create 3-year MA and classify
+```{r ma}
+inflation %>% 
+  filter(!is.na(inflation)) %>%
+  mutate(lag1 = lag(inflation),
+         lag2 = lag(inflation,2),
+         inflation.ma3 = (lag1 + lag2 + inflation)/3) %>%
+  select(-lag1,-lag2) %>%
+  mutate(classification = case_when(
+    inflation.ma3 >= 40 ~ "high",
+    inflation.ma3 >= 10 ~ "moderate",
+    !is.na(inflation.ma3) ~ "low",
+    TRUE ~ ""
+  )) %>% 
+  mutate(lagclass=lag(classification),
+               switch = case_when(
+                  is.na(lagclass) ~ 0,
+                  classification != lagclass ~ 1,
+                  TRUE ~ 0)) %>% 
+  select(-lagclass) %>%
+  mutate(episode.no = cumsum(switch)) %>% 
+  group_by(country,episode.no) %>%
+  arrange(country,episode.no,date) %>%
+  mutate(episode.duration = row_number()) %>%
+  mutate(episode.length = max(episode.duration))-> inflation.3ma
+
+
+```
+
+
+### Download World Bank GDP growth
+
+```{r download_gdp}
+gdp_growth <- wb(indicator=c("NY.GDP.MKTP.KD.ZG"))
+
+```
+
